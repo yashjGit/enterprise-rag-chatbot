@@ -10,8 +10,11 @@ st.set_page_config(page_title="Enterprise RAG Chatbot", page_icon="🧠", layout
 st.title("🧠 Enterprise RAG Chatbot")
 st.markdown("Upload a private PDF. The AI will read it, search it mathematically, and generate a conversational answer based ONLY on the document.")
 
-st.sidebar.header("1. System Configuration")
-api_key = st.sidebar.text_input("Enter your Gemini API Key:", type="password")
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+else:
+    st.sidebar.header("1. System Configuration")
+    api_key = st.sidebar.text_input("Enter Gemini API Key (Local Mode):", type="password")
 
 st.sidebar.header("2. Upload Knowledge Base")
 uploaded_file = st.sidebar.file_uploader("Upload a PDF file", type="pdf")
@@ -58,9 +61,8 @@ if st.session_state.doc_embeddings is not None:
 
     if user_query:
         if not api_key:
-            st.warning("⚠️ Please enter your API Key in the sidebar first!")
+            st.error("⚠️ Gemini API Key is missing! Add it to Streamlit Secrets or sidebar.")
             st.stop()
-
         
         with st.chat_message("user"):
             st.markdown(user_query)
@@ -75,28 +77,29 @@ if st.session_state.doc_embeddings is not None:
             retrieved_context = st.session_state.doc_chunks[best_match_index]
             
             genai.configure(api_key=api_key)
-            generative_model = genai.GenerativeModel('gemini-2.5-flash')
+            generative_model = genai.GenerativeModel('gemini-1.5-flash')
             
             strict_prompt = f"""
-            You are a helpful corporate AI assistant. A user has asked a question. 
-            You MUST answer their question using ONLY the context provided below. 
-            If the context does not contain the answer, say "I cannot answer this based on the provided document."
-            Do not use outside knowledge. Be concise and conversational.
-            
+            You are a helpful corporate AI assistant. Answer the question using ONLY the context provided.
             Context: {retrieved_context}
-            
-            User Question: {user_query}
+            Question: {user_query}
             """
             
             llm_response = generative_model.generate_content(strict_prompt)
             final_answer = llm_response.text
             
             bot_response = f"{final_answer}\n\n---\n*🔍 RAG Confidence Score: {round(highest_score * 100, 1)}%*"
+            
+            with st.chat_message("assistant"):
+                st.markdown(bot_response)
+                with st.expander("View Source Text Chunk"):
+                    st.info(f"...{retrieved_context}...")
+                    
         else:
             bot_response = "I cannot find a confident answer to that in the uploaded document."
+            with st.chat_message("assistant"):
+                st.markdown(bot_response)
             
-        with st.chat_message("assistant"):
-            st.markdown(bot_response)
         st.session_state.messages.append({"role": "assistant", "content": bot_response})
 else:
-    st.info("👈 Upload a PDF document and enter your API key to start.")
+    st.info("👈 Upload a PDF document to begin the AI analysis.")
